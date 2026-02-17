@@ -393,6 +393,21 @@ cc_library(
 )
 
 cc_library(
+    name = "fingerprint_test_helpers",
+    testonly = True,
+    hdrs = ["fingerprint_test_helpers.h"],
+    compatible_with = get_compatible_with_portable(),
+    deps = [
+        ":weight_cache",
+        ":weight_cache_test_helpers",
+        ":xnnpack_delegate_hdrs_only",
+        "//tensorflow/lite/c:common",
+        "@XNNPACK",
+        "@com_google_googletest//:gtest",
+    ],
+)
+
+cc_library(
     name = "mmap_handle",
     srcs = ["mmap_handle.cc"],
     hdrs = ["mmap_handle.h"],
@@ -447,6 +462,7 @@ cc_library(
     deps = [
         "//tensorflow/lite/kernels/internal:cppmath",
         "//tensorflow/lite/kernels/internal:types",
+        "//tensorflow/lite/schema:schema_fbs",
     ],
 )
 
@@ -594,6 +610,7 @@ cc_library(
     srcs = ["dynamically_quantized_fully_connected_tester.cc"],
     hdrs = ["dynamically_quantized_fully_connected_tester.h"],
     deps = [
+        ":test_util",
         ":xnnpack_delegate_test_mode",
         "//tensorflow/compiler/mlir/lite/schema:schema_conversion_utils",
         "//tensorflow/lite:framework",
@@ -614,6 +631,7 @@ cc_library(
     srcs = ["dynamically_quantized_conv_2d_tester.cc"],
     hdrs = ["dynamically_quantized_conv_2d_tester.h"],
     deps = [
+        ":test_util",
         ":xnnpack_delegate_test_mode",
         "//tensorflow/compiler/mlir/lite/schema:schema_conversion_utils",
         "//tensorflow/lite:framework",
@@ -634,6 +652,7 @@ cc_library(
     srcs = ["dynamically_quantized_transpose_conv_tester.cc"],
     hdrs = ["dynamically_quantized_transpose_conv_tester.h"],
     deps = [
+        ":test_util",
         ":xnnpack_delegate_test_mode",
         "//tensorflow/compiler/mlir/lite/schema:schema_conversion_utils",
         "//tensorflow/lite:framework",
@@ -810,6 +829,7 @@ cc_library(
     srcs = ["quantized_conv_2d_tester.cc"],
     hdrs = ["quantized_conv_2d_tester.h"],
     deps = [
+        ":test_util",
         ":xnnpack_delegate_test_mode",
         "//tensorflow/compiler/mlir/lite/schema:schema_conversion_utils",
         "//tensorflow/lite:framework",
@@ -818,7 +838,6 @@ cc_library(
         "//tensorflow/lite/core:framework",
         "//tensorflow/lite/core/c:common",
         "//tensorflow/lite/core/kernels:builtin_ops",
-        "//tensorflow/lite/schema:schema_conversion_utils",
         "//tensorflow/lite/schema:schema_fbs",
         "@com_google_googletest//:gtest",
         "@flatbuffers",
@@ -831,6 +850,7 @@ cc_library(
     srcs = ["quantized_depthwise_conv_2d_tester.cc"],
     hdrs = ["quantized_depthwise_conv_2d_tester.h"],
     deps = [
+        ":test_util",
         ":xnnpack_delegate_test_mode",
         "//tensorflow/compiler/mlir/lite/schema:schema_conversion_utils",
         "//tensorflow/lite:framework",
@@ -839,7 +859,6 @@ cc_library(
         "//tensorflow/lite/core:framework",
         "//tensorflow/lite/core/c:common",
         "//tensorflow/lite/core/kernels:builtin_ops",
-        "//tensorflow/lite/schema:schema_conversion_utils",
         "//tensorflow/lite/schema:schema_fbs",
         "@com_google_googletest//:gtest",
         "@flatbuffers",
@@ -852,6 +871,7 @@ cc_library(
     srcs = ["quantized_fully_connected_tester.cc"],
     hdrs = ["quantized_fully_connected_tester.h"],
     deps = [
+        ":test_util",
         ":xnnpack_delegate_test_mode",
         "//tensorflow/compiler/mlir/lite/schema:schema_conversion_utils",
         "//tensorflow/lite:framework",
@@ -860,7 +880,6 @@ cc_library(
         "//tensorflow/lite/core:framework",
         "//tensorflow/lite/core/c:common",
         "//tensorflow/lite/core/kernels:builtin_ops",
-        "//tensorflow/lite/schema:schema_conversion_utils",
         "//tensorflow/lite/schema:schema_fbs",
         "@com_google_googletest//:gtest",
         "@flatbuffers",
@@ -1217,6 +1236,7 @@ cc_library(
     srcs = ["quantized_transpose_conv_tester.cc"],
     hdrs = ["quantized_transpose_conv_tester.h"],
     deps = [
+        ":test_util",
         ":xnnpack_delegate_test_mode",
         "//tensorflow/compiler/mlir/lite/schema:schema_conversion_utils",
         "//tensorflow/lite:framework",
@@ -1224,9 +1244,7 @@ cc_library(
         "//tensorflow/lite/core:framework",
         "//tensorflow/lite/core/c:common",
         "//tensorflow/lite/core/kernels:builtin_ops",
-        "//tensorflow/lite/schema:schema_conversion_utils",
         "//tensorflow/lite/schema:schema_fbs",
-        "@FP16",
         "@com_google_googletest//:gtest",
         "@flatbuffers",
     ],
@@ -1347,6 +1365,7 @@ cc_test(
         "//conditions:default": [],
     }),
     deps = [
+        ":fingerprint_test_helpers",
         ":quantized_conv_2d_tester",
         ":test_main",
         ":xnnpack_delegate_test_mode",
@@ -1363,6 +1382,7 @@ cc_test(
         "//conditions:default": [],
     }),
     deps = [
+        ":fingerprint_test_helpers",
         ":quantized_depthwise_conv_2d_tester",
         ":test_main",
         ":xnnpack_delegate_test_mode",
@@ -1397,6 +1417,7 @@ cc_test(
     }),
     deps = [
         ":conv_2d_tester",
+        ":fingerprint_test_helpers",
         ":test_main",
         ":xnnpack_delegate_test_mode",
         "//tensorflow/lite/c:c_api_types",
@@ -1446,6 +1467,7 @@ cc_test(
     }),
     deps = [
         ":depthwise_conv_2d_tester",
+        ":fingerprint_test_helpers",
         ":test_main",
         ":xnnpack_delegate_test_mode",
         "//tensorflow/lite/c:c_api_types",
@@ -1465,6 +1487,7 @@ cc_test(
     tags = ["notap"],
     deps = [
         ":dynamically_quantized_fully_connected_tester",
+        ":fingerprint_test_helpers",
         ":test_main",
         ":xnnpack_delegate_test_mode",
         "//tensorflow/lite/c:c_api_types",
@@ -1481,6 +1504,7 @@ cc_test(
     }),
     deps = [
         ":dynamically_quantized_conv_2d_tester",
+        ":fingerprint_test_helpers",
         ":test_main",
         ":xnnpack_delegate_test_mode",
         "//tensorflow/lite/c:c_api_types",
@@ -1497,6 +1521,7 @@ cc_test(
     }),
     deps = [
         ":dynamically_quantized_transpose_conv_tester",
+        ":fingerprint_test_helpers",
         ":test_main",
         ":xnnpack_delegate_test_mode",
         "//tensorflow/lite/c:c_api_types",
@@ -1513,10 +1538,14 @@ cc_test(
         "//conditions:default": [],
     }),
     deps = [
+        ":fingerprint_test_helpers",
         ":fully_connected_tester",
         ":test_main",
+        ":weight_cache",
+        ":weight_cache_test_helpers",
         ":xnnpack_delegate_test_mode",
         "//tensorflow/lite/c:c_api_types",
+        "@XNNPACK",
         "@com_google_googletest//:gtest",
     ],
 )
@@ -1864,6 +1893,7 @@ cc_test(
         "//conditions:default": [],
     }),
     deps = [
+        ":fingerprint_test_helpers",
         ":quantized_conv_2d_tester",
         ":test_main",
         ":xnnpack_delegate_test_mode",
@@ -1880,6 +1910,7 @@ cc_test(
         "//conditions:default": [],
     }),
     deps = [
+        ":fingerprint_test_helpers",
         ":quantized_depthwise_conv_2d_tester",
         ":test_main",
         ":xnnpack_delegate_test_mode",
@@ -1930,6 +1961,7 @@ cc_test(
         "//conditions:default": [],
     }),
     deps = [
+        ":fingerprint_test_helpers",
         ":quantized_fully_connected_tester",
         ":test_main",
         ":xnnpack_delegate_test_mode",
@@ -2163,6 +2195,7 @@ cc_test(
         "//conditions:default": [],
     }),
     deps = [
+        ":fingerprint_test_helpers",
         ":quantized_transpose_conv_tester",
         ":test_main",
         ":xnnpack_delegate_test_mode",
@@ -2307,6 +2340,7 @@ cc_test(
         "//conditions:default": [],
     }),
     deps = [
+        ":fingerprint_test_helpers",
         ":test_main",
         ":transpose_conv_tester",
         ":xnnpack_delegate_test_mode",
@@ -2386,6 +2420,7 @@ cc_test(
         "//conditions:default": [],
     }),
     deps = [
+        ":fingerprint_test_helpers",
         ":quantized_conv_2d_tester",
         ":test_main",
         ":xnnpack_delegate_test_mode",
@@ -2401,6 +2436,7 @@ cc_test(
         "//conditions:default": [],
     }),
     deps = [
+        ":fingerprint_test_helpers",
         ":quantized_depthwise_conv_2d_tester",
         ":test_main",
         ":xnnpack_delegate_test_mode",
@@ -2431,6 +2467,7 @@ cc_test(
         "//conditions:default": [],
     }),
     deps = [
+        ":fingerprint_test_helpers",
         ":quantized_fully_connected_tester",
         ":test_main",
         ":xnnpack_delegate_test_mode",
@@ -2641,6 +2678,7 @@ cc_test(
         "//conditions:default": [],
     }),
     deps = [
+        ":fingerprint_test_helpers",
         ":quantized_transpose_conv_tester",
         ":test_main",
         ":xnnpack_delegate_test_mode",

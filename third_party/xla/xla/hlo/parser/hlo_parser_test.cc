@@ -47,6 +47,7 @@ limitations under the License.
 #include "xla/hlo/testlib/verified_hlo_module.h"
 #include "xla/layout.h"
 #include "xla/layout_util.h"
+#include "xla/service/hlo.pb.h"
 #include "xla/service/hlo_module_config.h"
 #include "xla/service/pattern_matcher.h"
 #include "xla/shape.h"
@@ -1131,6 +1132,29 @@ ENTRY %fusion.v3 () -> f32[3,2,1,1] {
   %constant = f32[3,2,1,1]{3,2,1,0} constant({ { /*i0=0*/ { /*i1=0*/ {-1} }, { /*i1=1*/ {4.1} } }, { /*i0=1*/ { /*i1=0*/ {2} }, { /*i1=1*/ {4.1} } }, { /*i0=2*/ { /*i1=0*/ {5} }, { /*i1=1*/ {4.4} } } })
   %constant.1 = f32[2]{0} constant({3.14, 4.25})
   ROOT %fusion = f32[3,2,1,1]{3,2,1,0} fusion(f32[3,2,1,1]{3,2,1,0} %constant, f32[2]{0} %constant.1), kind=kLoop, calls=%fused_computation
+}
+
+)"
+},
+// AsyncStartWithAliasing
+{
+"AsyncStartWithAliasing",
+R"(HloModule module, entry_computation_layout={(f32[8,4,1]{0,1,2:T(4,128)})->f32[8,4,1]{0,1,2:T(4,128)}}
+
+%async_computation (param_0.2: (f32[8,4,1], (f32[8,4,1], u32[], u32[]))) -> f32[8,4,1] {
+  %param_0.2 = (f32[8,4,1]{1,2,0:T(1,128)}, (f32[8,4,1]{1,2,0:T(1,128)}, u32[]{:S(2)}, u32[]{:S(2)})) parameter(0)
+  %get-tuple-element = f32[8,4,1]{1,2,0:T(1,128)} get-tuple-element((f32[8,4,1]{1,2,0:T(1,128)}, (f32[8,4,1]{1,2,0:T(1,128)}, u32[]{:S(2)}, u32[]{:S(2)})) %param_0.2), index=0
+  ROOT %all-to-all0.0 = f32[8,4,1]{1,2,0:T(1,128)} all-to-all(f32[8,4,1]{1,2,0:T(1,128)} %get-tuple-element), channel_id=1, replica_groups={{0,1,2,3,4,5,6,7}}, dimensions={0}
+}
+
+ENTRY %Comp_spmd (param: f32[8,4,1]) -> f32[8,4,1] {
+  %param = f32[8,4,1]{0,1,2:T(4,128)} parameter(0)
+  %copy = f32[8,4,1]{1,2,0:T(1,128)} copy(f32[8,4,1]{0,1,2:T(4,128)} %param)
+  %custom-call = (f32[8,4,1]{1,2,0:T(1,128)}, u32[]{:S(2)}, u32[]{:S(2)}) custom-call(), custom_call_target="BarrierStart"
+  %tuple = (f32[8,4,1]{1,2,0:T(1,128)}, (f32[8,4,1]{1,2,0:T(1,128)}, u32[]{:S(2)}, u32[]{:S(2)})) tuple(f32[8,4,1]{1,2,0:T(1,128)} %copy, (f32[8,4,1]{1,2,0:T(1,128)}, u32[]{:S(2)}, u32[]{:S(2)}) %custom-call)
+  %all-to-all-start.1 = (((f32[8,4,1]{1,2,0:T(1,128)}, (f32[8,4,1]{1,2,0:T(1,128)}, u32[]{:S(2)}, u32[]{:S(2)}))), f32[8,4,1]{1,2,0:T(1,128)}, u32[]{:S(2)}, u32[]{:S(2)}) async-start((f32[8,4,1]{1,2,0:T(1,128)}, (f32[8,4,1]{1,2,0:T(1,128)}, u32[]{:S(2)}, u32[]{:S(2)})) %tuple), output_to_operand_aliasing={{0,0,1,0}: (0, {1,0}), {1}: (0, {1,0}), {0,0,1,1}: (0, {1,1}), {2}: (0, {1,1}), {0,0,1,2}: (0, {1,2}), {3}: (0, {1,2})}, calls=%async_computation
+  %all-to-all-done = f32[8,4,1]{1,2,0:T(1,128)} async-done((((f32[8,4,1]{1,2,0:T(1,128)}, (f32[8,4,1]{1,2,0:T(1,128)}, u32[]{:S(2)}, u32[]{:S(2)}))), f32[8,4,1]{1,2,0:T(1,128)}, u32[]{:S(2)}, u32[]{:S(2)}) %all-to-all-start.1)
+  ROOT %copy.1 = f32[8,4,1]{0,1,2:T(4,128)} copy(f32[8,4,1]{1,2,0:T(1,128)} %all-to-all-done)
 }
 
 )"
@@ -2671,6 +2695,27 @@ ENTRY BitcastConvertUsage {
 
 )"
 },
+
+// Scan
+{
+"Scan",
+R"(HloModule scan_module, entry_computation_layout={(f32[4]{0})->(f32[4]{0}, f32[])}
+
+add_F32 {
+  lhs = f32[] parameter(0)
+  rhs = f32[] parameter(1)
+  add = f32[] add(lhs, rhs)
+  ROOT t = (f32[], f32[]) tuple(add, add)
+}
+
+ENTRY Scan {
+  input = f32[4]{0} parameter(0)
+  init = f32[] constant(0)
+  ROOT scan = (f32[4]{0}, f32[]) scan(input, init), dimensions={0}, num_carries=1, is_reverse=true, is_associative=true, to_apply=add_F32
+}
+
+)"
+},
 });
   // clang-format on
 }
@@ -4053,6 +4098,158 @@ TEST_F(HloParserTest, ParseShardingSubGroup) {
             original);
 }
 
+TEST_F(HloParserTest, ParseNamedSharding1) {
+  const std::string original = "{mesh[a=2,b=4,c=3,d=8], [{a}, {b}]}";
+  ASSERT_OK_AND_ASSIGN(HloSharding sharding, ParseSharding(original));
+  EXPECT_EQ(sharding.ToString(/*include_metadata=*/true), original);
+}
+
+TEST_F(HloParserTest, ParseNamedSharding2) {
+  const std::string original = "{mesh[a=2,b=4,c=3,d=8], [{a}, {c, b}]}";
+  ASSERT_OK_AND_ASSIGN(HloSharding sharding, ParseSharding(original));
+  EXPECT_EQ(sharding.ToString(/*include_metadata=*/true), original);
+}
+
+TEST_F(HloParserTest, ParseNamedShardingOpenDims) {
+  const std::string original = "{mesh[a=2,b=4,c=3,d=8], [{b, a}, {c, d, ?}]}";
+  ASSERT_OK_AND_ASSIGN(HloSharding sharding, ParseSharding(original));
+  EXPECT_EQ(sharding.ToString(/*include_metadata=*/true), original);
+}
+
+TEST_F(HloParserTest, ParseNamedShardingSubAxes1) {
+  const std::string original = "{mesh[a=2,b=4,c=3,d=8], [{a}, {b:(2)2}]}";
+  ASSERT_OK_AND_ASSIGN(HloSharding sharding, ParseSharding(original));
+  EXPECT_EQ(sharding.ToString(/*include_metadata=*/true), original);
+}
+
+TEST_F(HloParserTest, ParseNamedShardingSubAxes2) {
+  const std::string original =
+      "{mesh[a=2,b=4,c=3,d=8], [{b:(2)2}, {d:(4)2, c}]}";
+  ASSERT_OK_AND_ASSIGN(HloSharding sharding, ParseSharding(original));
+  EXPECT_EQ(sharding.ToString(/*include_metadata=*/true), original);
+}
+
+TEST_F(HloParserTest, ParseNamedShardingSubAxesOpenDims) {
+  const std::string original =
+      "{mesh[a=2,b=4,c=3,d=8], [{b:(2)2}, {d:(4)2, c, ?}]}";
+  ASSERT_OK_AND_ASSIGN(HloSharding sharding, ParseSharding(original));
+  EXPECT_EQ(sharding.ToString(/*include_metadata=*/true), original);
+}
+
+TEST_F(HloParserTest, ParseNamedShardingNonIotaMesh) {
+  const std::string original =
+      "{mesh[a=2,b=4,c=4,d=2], device_ids=([4,16]T(1,0)), [{a}]}";
+  ASSERT_OK_AND_ASSIGN(HloSharding sharding, ParseSharding(original));
+  EXPECT_EQ(sharding.ToString(/*include_metadata=*/true), original);
+}
+
+TEST_F(HloParserTest, ParseNamedShardingNonIotaMeshDeviceList) {
+  const std::string original = "{mesh[x=2,y=2], device_ids=(0,2,1,3), [{x}]}";
+  ASSERT_OK_AND_ASSIGN(HloSharding sharding, ParseSharding(original));
+  EXPECT_EQ(sharding.ToString(/*include_metadata=*/true), original);
+}
+
+TEST_F(HloParserTest, ParseNamedShardingFullyReplicated) {
+  const std::string original = "{mesh[a=2,b=4], replicated}";
+  ASSERT_OK_AND_ASSIGN(HloSharding sharding, ParseSharding(original));
+  EXPECT_EQ(sharding.ToString(/*include_metadata=*/true), original);
+}
+
+TEST_F(HloParserTest, ParseNamedShardingReplicatedAxes) {
+  const std::string original = "{mesh[a=2,b=4], [{a}], replicated={b}}";
+  ASSERT_OK_AND_ASSIGN(HloSharding sharding, ParseSharding(original));
+  EXPECT_EQ(sharding.ToString(/*include_metadata=*/true), original);
+}
+
+TEST_F(HloParserTest, ParseNamedShardingMaximal) {
+  const std::string original = "{maximal_mesh[device_id=5]}";
+  ASSERT_OK_AND_ASSIGN(HloSharding sharding, ParseSharding(original));
+  EXPECT_EQ(sharding.ToString(/*include_metadata=*/true), original);
+}
+
+TEST_F(HloParserTest, ParseNamedShardingFullyUnreduced) {
+  const std::string original = "{mesh[a=2,b=4], unreduced}";
+  ASSERT_OK_AND_ASSIGN(HloSharding sharding, ParseSharding(original));
+  EXPECT_EQ(sharding.ToString(/*include_metadata=*/true), original);
+}
+
+TEST_F(HloParserTest, ParseNamedShardingUnreducedAxes) {
+  const std::string original =
+      "{mesh[a=2,b=4,c=3,d=8], [{}, {b}], unreduced={d:(4)2}}";
+  ASSERT_OK_AND_ASSIGN(HloSharding sharding, ParseSharding(original));
+  EXPECT_EQ(sharding.ToString(/*include_metadata=*/true), original);
+}
+
+TEST_F(HloParserTest, ParseNamedShardingFullyManual) {
+  const std::string original = "{mesh[a=2,b=4], manual}";
+  ASSERT_OK_AND_ASSIGN(HloSharding sharding, ParseSharding(original));
+  EXPECT_EQ(sharding.ToString(/*include_metadata=*/true), original);
+}
+
+TEST_F(HloParserTest, ParseNamedShardingManualAxes) {
+  const std::string original =
+      "{mesh[a=2,b=4,c=3,d=8], [{a}], manual={d:(4)2}}";
+  ASSERT_OK_AND_ASSIGN(HloSharding sharding, ParseSharding(original));
+  EXPECT_EQ(sharding.ToString(/*include_metadata=*/true), original);
+}
+
+TEST_F(HloParserTest, ParseNamedShardingAllFieldsWithMetadata) {
+  const std::string original =
+      "{mesh[a=2,b=4,c=3,d=8], [{a}], replicated={c}, unreduced={d:(4)2}, "
+      "manual={b:(2)2}, metadata={{op_name=\"foo\"}, {op_name=\"bar\"}}}";
+  ASSERT_OK_AND_ASSIGN(HloSharding sharding, ParseSharding(original));
+  EXPECT_EQ(sharding.ToString(/*include_metadata=*/true), original);
+}
+
+TEST_F(HloParserTest, ParseNamedShardingFullyReplicatedWithMetadata) {
+  const std::string original =
+      "{mesh[a=2,b=4], replicated, metadata={{op_name=\"foo\"}}}";
+  ASSERT_OK_AND_ASSIGN(HloSharding sharding, ParseSharding(original));
+  EXPECT_EQ(sharding.ToString(/*include_metadata=*/true), original);
+}
+
+TEST_F(HloParserTest, ParseNamedShardingTuple) {
+  const std::string original =
+      "{{mesh[a=2,b=4,c=3,d=8], [{d, c}, {a, b}]}, {mesh[a=2,b=4,c=3,d=8], "
+      "replicated}, {mesh[a=2,b=4,c=3,d=8], [{d:(2)2, b}, {a, ?}], "
+      "unreduced={c}}, {mesh[a=2,b=4,c=3,d=8], [{d, c}, {a, b}], "
+      "metadata={{op_name=\"foo\"}, {op_name=\"bar\"}}}}";
+  ASSERT_OK_AND_ASSIGN(HloSharding sharding, ParseSharding(original));
+  EXPECT_EQ(sharding.ToString(/*include_metadata=*/true), original);
+}
+
+TEST_F(HloParserTest, ParseMixedShardingTuple1) {
+  const std::string original =
+      "{{replicated}, {mesh[a=2,b=4], replicated}, {maximal device=5}, "
+      "{maximal_mesh[device_id=5]}}";
+  ASSERT_OK_AND_ASSIGN(HloSharding sharding, ParseSharding(original));
+
+  EXPECT_EQ(sharding.ToString(/*include_metadata=*/true), original);
+  EXPECT_TRUE(sharding.IsTuple());
+  EXPECT_EQ(sharding.tuple_elements().size(), 4);
+  EXPECT_FALSE(sharding.tuple_elements()[0].UseNamedShardingLeaf());
+  EXPECT_TRUE(sharding.tuple_elements()[0].IsReplicatedLeaf());
+  EXPECT_TRUE(sharding.tuple_elements()[1].UseNamedShardingLeaf());
+  EXPECT_TRUE(sharding.tuple_elements()[1].IsReplicatedLeaf());
+  EXPECT_FALSE(sharding.tuple_elements()[2].UseNamedShardingLeaf());
+  EXPECT_TRUE(sharding.tuple_elements()[2].IsTileMaximalLeaf());
+  EXPECT_TRUE(sharding.tuple_elements()[3].UseNamedShardingLeaf());
+  EXPECT_TRUE(sharding.tuple_elements()[3].IsTileMaximalLeaf());
+}
+
+TEST_F(HloParserTest, ParseMixedShardingTuple2) {
+  const std::string original =
+      "{{mesh[a=2,b=2], [{a}, {}]}, {devices=[2,2]<=[4] "
+      "last_tile_dim_replicate}}";
+  ASSERT_OK_AND_ASSIGN(HloSharding sharding, ParseSharding(original));
+
+  EXPECT_EQ(sharding.ToString(/*include_metadata=*/true), original);
+  EXPECT_TRUE(sharding.IsTuple());
+  EXPECT_EQ(sharding.tuple_elements().size(), 2);
+  EXPECT_TRUE(sharding.tuple_elements()[0].UseNamedShardingLeaf());
+  EXPECT_FALSE(sharding.tuple_elements()[1].UseNamedShardingLeaf());
+}
+
 TEST_F(HloParserTest, ParseTrivialIotaShardingPartialReplication) {
   const std::string original = "{devices=[2,2]<=[4] last_tile_dim_replicate}";
   ASSERT_OK_AND_ASSIGN(HloSharding sharding, ParseSharding(original));
@@ -4410,6 +4607,18 @@ TEST(HloParserSingleOpTest, ConvolutionTrivialFeatureGroupCount) {
   auto* convolution =
       Cast<HloConvolutionInstruction>(computation->root_instruction());
   EXPECT_EQ(convolution->feature_group_count(), 1);
+}
+
+TEST(HloParserSingleOpTest, ConvolutionWithKind) {
+  const std::string text =
+      R"(%convolution = f32[1,2,1]{2,0,1} convolution(f32[1,2,1]{2,0,1} %copy, f32[1,1,1]{2,1,0} %filter), window={size=1}, dim_labels=b0f_0io->b0f, conv_kind=fprop)";
+  ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnUnverifiedModule(text));
+  const HloComputation* computation = module->entry_computation();
+  ASSERT_NE(computation, nullptr);
+  auto* convolution =
+      Cast<HloConvolutionInstruction>(computation->root_instruction());
+  EXPECT_EQ(convolution->conv_kind(),
+            HloConvolutionInstruction::ConvKind::FPROP);
 }
 
 TEST(HloParserSingleOpTest, MultipleOpsProducesError) {

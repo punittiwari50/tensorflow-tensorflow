@@ -37,9 +37,8 @@ limitations under the License.
 #include "xla/literal.h"
 #include "xla/literal_util.h"
 #include "xla/service/gpu/backend_configs.pb.h"
+#include "xla/service/gpu/tests/collective_ops_e2e_test_base.h"
 #include "xla/service/hlo_module_config.h"
-#include "xla/service/hlo_runner.h"
-#include "xla/tests/collective_ops_e2e_test_base.h"
 #include "xla/tests/literal_test_util.h"
 #include "xla/tsl/lib/core/status_test_util.h"
 #include "xla/tsl/platform/errors.h"
@@ -57,6 +56,7 @@ enum class RaggedAllToAllImplType {
   kNccl,
   kDecomposer,
   kOneShot,
+  kOneShotWithMultiGpuBarrier,
 };
 
 class RaggedAllToAllTestBase : public CollectiveOpsWithFlagsBase {
@@ -225,6 +225,10 @@ class RaggedAllToAllTestBase : public CollectiveOpsWithFlagsBase {
         impl_type_ == RaggedAllToAllImplType::kDecomposer);
     opts.set_xla_gpu_unsupported_use_ragged_all_to_all_one_shot_kernel(
         impl_type_ == RaggedAllToAllImplType::kOneShot);
+    if (impl_type_ == RaggedAllToAllImplType::kOneShotWithMultiGpuBarrier) {
+      opts.set_xla_gpu_unsupported_use_ragged_all_to_all_one_shot_kernel(true);
+      opts.set_xla_gpu_experimental_ragged_all_to_all_use_barrier(true);
+    }
     return opts;
   }
 
@@ -339,9 +343,9 @@ TEST_P(RaggedAllToAllTest, RaggedAllToAll_2GPUs) {
   })";
 
   const int64_t kNumReplicas = 2;
-  ASSERT_GE(hlo_runner_->device_count(), kNumReplicas)
+  ASSERT_GE(device_count(), kNumReplicas)
       << "Test requires at least " << kNumReplicas << " devices ("
-      << hlo_runner_->device_count() << " available)";
+      << device_count() << " available)";
 
   TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(
                                            kModuleReplicatedStr, kNumReplicas));
@@ -377,9 +381,9 @@ TEST_P(RaggedAllToAllTest, RaggedAllToAll_2GPUs_CommandBuffer) {
   })";
 
   const int64_t kNumReplicas = 2;
-  ASSERT_GE(hlo_runner_->device_count(), kNumReplicas)
+  ASSERT_GE(device_count(), kNumReplicas)
       << "Test requires at least " << kNumReplicas << " devices ("
-      << hlo_runner_->device_count() << " available)";
+      << device_count() << " available)";
 
   ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(
                                         kModuleReplicatedStr, kNumReplicas));
@@ -426,9 +430,9 @@ TEST_P(RaggedAllToAllTest, RaggedAllToAll_2GPUs_S4) {
   })";
 
   const int64_t kNumReplicas = 2;
-  ASSERT_GE(hlo_runner_->device_count(), kNumReplicas)
+  ASSERT_GE(device_count(), kNumReplicas)
       << "Test requires at least " << kNumReplicas << " devices ("
-      << hlo_runner_->device_count() << " available)";
+      << device_count() << " available)";
 
   TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(
                                            kModuleReplicatedStr, kNumReplicas));
@@ -486,9 +490,9 @@ TEST_P(RaggedAllToAllTest, RaggedAllToAll_2GPUs_InputBufferLargerThanOutput) {
   })";
 
   const int64_t kNumReplicas = 2;
-  ASSERT_GE(hlo_runner_->device_count(), kNumReplicas)
+  ASSERT_GE(device_count(), kNumReplicas)
       << "Test requires at least " << kNumReplicas << " devices ("
-      << hlo_runner_->device_count() << " available)";
+      << device_count() << " available)";
 
   TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(
                                            kModuleReplicatedStr, kNumReplicas));
@@ -523,9 +527,9 @@ TEST_P(RaggedAllToAllTest, RaggedAllToAll_2GPUs_OutputBufferLargerThanInput) {
   })";
 
   const int64_t kNumReplicas = 2;
-  ASSERT_GE(hlo_runner_->device_count(), kNumReplicas)
+  ASSERT_GE(device_count(), kNumReplicas)
       << "Test requires at least " << kNumReplicas << " devices ("
-      << hlo_runner_->device_count() << " available)";
+      << device_count() << " available)";
 
   TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(
                                            kModuleReplicatedStr, kNumReplicas));
@@ -560,9 +564,9 @@ TEST_P(RaggedAllToAllTest, RaggedAllToAll_2GPUs_MultipleUpdates) {
   })";
 
   const int64_t kNumReplicas = 2;
-  ASSERT_GE(hlo_runner_->device_count(), kNumReplicas)
+  ASSERT_GE(device_count(), kNumReplicas)
       << "Test requires at least " << kNumReplicas << " devices ("
-      << hlo_runner_->device_count() << " available)";
+      << device_count() << " available)";
 
   HloModuleConfig config = GetModuleConfigForTest(kNumReplicas);
 
@@ -600,9 +604,9 @@ TEST_P(RaggedAllToAllTest, RaggedAllToAll_2GPUs_MultiDimData) {
   })";
 
   const int64_t kNumReplicas = 2;
-  ASSERT_GE(hlo_runner_->device_count(), kNumReplicas)
+  ASSERT_GE(device_count(), kNumReplicas)
       << "Test requires at least " << kNumReplicas << " devices ("
-      << hlo_runner_->device_count() << " available)";
+      << device_count() << " available)";
 
   TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(
                                            kModuleReplicatedStr, kNumReplicas));
@@ -638,9 +642,9 @@ TEST_P(RaggedAllToAllTest, RaggedAllToAll_2GPUs_Degenerate) {
   })";
 
   const int64_t kNumReplicas = 2;
-  ASSERT_GE(hlo_runner_->device_count(), kNumReplicas)
+  ASSERT_GE(device_count(), kNumReplicas)
       << "Test requires at least " << kNumReplicas << " devices ("
-      << hlo_runner_->device_count() << " available)";
+      << device_count() << " available)";
 
   TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(
                                            kModuleReplicatedStr, kNumReplicas));
@@ -676,9 +680,9 @@ TEST_P(RaggedAllToAllTest, RaggedAllToAll_2GPUs_NonDefaultLayout) {
   })";
 
   const int64_t kNumReplicas = 2;
-  ASSERT_GE(hlo_runner_->device_count(), kNumReplicas)
+  ASSERT_GE(device_count(), kNumReplicas)
       << "Test requires at least " << kNumReplicas << " devices ("
-      << hlo_runner_->device_count() << " available)";
+      << device_count() << " available)";
 
   TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(
                                            kModuleReplicatedStr, kNumReplicas));
@@ -719,9 +723,9 @@ TEST_P(RaggedAllToAllTest,
   })";
 
   const int64_t kNumReplicas = 2;
-  ASSERT_GE(hlo_runner_->device_count(), kNumReplicas)
+  ASSERT_GE(device_count(), kNumReplicas)
       << "Test requires at least " << kNumReplicas << " devices ("
-      << hlo_runner_->device_count() << " available)";
+      << device_count() << " available)";
 
   TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(
                                            kModuleReplicatedStr, kNumReplicas));
@@ -758,9 +762,9 @@ TEST_P(RaggedAllToAllTest, RaggedAllToAll_8GPUs) {
 
   const int64_t kNumReplicas = 8;
   const int64_t kNumUpdatesPerReplica = 4;
-  if (hlo_runner_->device_count() < kNumReplicas) {
+  if (device_count() < kNumReplicas) {
     GTEST_SKIP() << "Test requires at least " << kNumReplicas << " devices ("
-                 << hlo_runner_->device_count() << " available)";
+                 << device_count() << " available)";
   }
 
   TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(
@@ -803,9 +807,9 @@ TEST_P(RaggedAllToAllTest, RaggedAllToAll_8GPUs_2ReplicasPerGroups) {
   const int64_t kNumReplicas = 8;
   const int64_t kNumReplicasPerGroup = 2;
   const int64_t kNumUpdatesPerReplica = 16;
-  if (hlo_runner_->device_count() < kNumReplicas) {
+  if (device_count() < kNumReplicas) {
     GTEST_SKIP() << "Test requires at least " << kNumReplicas << " devices ("
-                 << hlo_runner_->device_count() << " available)";
+                 << device_count() << " available)";
   }
 
   HloModuleConfig config =
@@ -851,9 +855,9 @@ TEST_P(RaggedAllToAllTest, RaggedAllToAll_8GPUs_4ReplicasPerGroups) {
   const int64_t kNumReplicas = 8;
   const int64_t kNumReplicasPerGroup = 4;
   const int64_t kNumUpdatesPerReplica = 8;
-  if (hlo_runner_->device_count() < kNumReplicas) {
+  if (device_count() < kNumReplicas) {
     GTEST_SKIP() << "Test requires at least " << kNumReplicas << " devices ("
-                 << hlo_runner_->device_count() << " available)";
+                 << device_count() << " available)";
   }
 
   HloModuleConfig config =
@@ -889,6 +893,8 @@ std::string RaggedAllToAllImplTypeName(
       return "decomposer";
     case RaggedAllToAllImplType::kOneShot:
       return "one_shot";
+    case RaggedAllToAllImplType::kOneShotWithMultiGpuBarrier:
+      return "one_shot_with_multi_gpu_barrier";
     default:
       LOG(FATAL) << "Unknown ragged all-to-all implementation type.";
   }
@@ -896,10 +902,12 @@ std::string RaggedAllToAllImplTypeName(
 
 INSTANTIATE_TEST_SUITE_P(
     RaggedAllToAllTest, RaggedAllToAllTest,
-    ::testing::Combine(::testing::Bool(),
-                       ::testing::Values(RaggedAllToAllImplType::kNccl,
-                                         RaggedAllToAllImplType::kDecomposer,
-                                         RaggedAllToAllImplType::kOneShot)),
+    ::testing::Combine(
+        ::testing::Bool(),
+        ::testing::Values(RaggedAllToAllImplType::kNccl,
+                          RaggedAllToAllImplType::kDecomposer,
+                          RaggedAllToAllImplType::kOneShot,
+                          RaggedAllToAllImplType::kOneShotWithMultiGpuBarrier)),
     [](const ::testing::TestParamInfo<std::tuple<bool, RaggedAllToAllImplType>>&
            info) {
       return absl::StrCat(std::get<0>(info.param) ? "async" : "sync", "_",
@@ -948,9 +956,9 @@ TEST_P(RaggedAllToAllMultiHostDecomposerTest, RaggedAllToAll_2GPUs_SliceSize1) {
 
   const int64_t kNumReplicas = 2;
   const int64_t kNumUpdatesPerReplica = 16;
-  ASSERT_GE(hlo_runner_->device_count(), kNumReplicas)
+  ASSERT_GE(device_count(), kNumReplicas)
       << "Test requires at least " << kNumReplicas << " devices ("
-      << hlo_runner_->device_count() << " available)";
+      << device_count() << " available)";
 
   HloModuleConfig config =
       GetModuleConfigForTest(/*replica_count=*/kNumReplicas);
@@ -1002,9 +1010,9 @@ TEST_P(RaggedAllToAllMultiHostDecomposerTest,
 
   const int64_t kNumReplicas = 8;
   const int64_t kNumUpdatesPerReplica = 4;
-  if (hlo_runner_->device_count() < kNumReplicas) {
+  if (device_count() < kNumReplicas) {
     GTEST_SKIP() << "Test requires at least " << kNumReplicas << " devices ("
-                 << hlo_runner_->device_count() << " available)";
+                 << device_count() << " available)";
   }
 
   TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(
@@ -1054,9 +1062,9 @@ TEST_P(RaggedAllToAllMultiHostDecomposerTest, RaggedAllToAll_8GPUs_SliceSize4) {
 
   const int64_t kNumReplicas = 8;
   const int64_t kNumUpdatesPerReplica = 4;
-  if (hlo_runner_->device_count() < kNumReplicas) {
+  if (device_count() < kNumReplicas) {
     GTEST_SKIP() << "Test requires at least " << kNumReplicas << " devices ("
-                 << hlo_runner_->device_count() << " available)";
+                 << device_count() << " available)";
   }
 
   TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(
@@ -1108,9 +1116,9 @@ TEST_P(RaggedAllToAllMultiHostDecomposerTest,
   const int64_t kNumReplicas = 8;
   const int64_t kNumReplicasPerGroup = 4;
   const int64_t kNumUpdatesPerReplica = 8;
-  if (hlo_runner_->device_count() < kNumReplicas) {
+  if (device_count() < kNumReplicas) {
     GTEST_SKIP() << "Test requires at least " << kNumReplicas << " devices ("
-                 << hlo_runner_->device_count() << " available)";
+                 << device_count() << " available)";
   }
 
   TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(

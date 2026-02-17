@@ -27,6 +27,7 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "absl/log/check.h"
 #include "absl/random/uniform_int_distribution.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -43,7 +44,6 @@ limitations under the License.
 #include "xla/shape_util.h"
 #include "xla/tsl/lib/core/bitmap.h"
 #include "xla/tsl/platform/logging.h"  // IWYU pragma: keep
-#include "xla/tsl/platform/status.h"
 #include "xla/types.h"
 #include "xla/util.h"
 #include "xla/xla_data.pb.h"
@@ -84,9 +84,9 @@ Literal ConvertType(LiteralSlice literal) {
               dest[i] = static_cast<ToNativeT>(src[i]);
             }
           } else {
-            TF_CHECK_OK(result.CopyFrom(literal,
-                                        /*dest_shape_index=*/shape_index,
-                                        /*src_shape_index=*/shape_index));
+            CHECK_OK(result.CopyFrom(literal,
+                                     /*dest_shape_index=*/shape_index,
+                                     /*src_shape_index=*/shape_index));
           }
         }
       });
@@ -411,10 +411,13 @@ template <typename IntT>
 void PopulateWithRandomIntegralDataWithBounds(Literal* literal,
                                               std::minstd_rand0* engine,
                                               bool no_duplicates, IntT min,
-                                              IntT max) {
+                                              IntT max,
+                                              std::optional<IntT> alignment) {
   CHECK_NOTNULL(engine);
   CHECK_EQ(literal->shape().element_type(),
            primitive_util::NativeToPrimitiveType<IntT>());
+  CHECK(!(no_duplicates && alignment.has_value()))
+      << "Cannot set both no_duplicates and alignment for integral types.";
   if (no_duplicates &&
       ShapeUtil::ElementsIn(literal->shape()) < static_cast<int64_t>(max)) {
     int32_t start = 0;
@@ -432,6 +435,9 @@ void PopulateWithRandomIntegralDataWithBounds(Literal* literal,
         static_cast<RngT<IntT>>(min), static_cast<RngT<IntT>>(max));
     for (IntT& value : literal->data<IntT>()) {
       value = static_cast<IntT>(generator(*engine));
+      if (alignment.has_value()) {
+        value = (value / alignment.value()) * alignment.value();
+      }
     }
   }
 }
@@ -684,7 +690,7 @@ void PopulateWithRandomIntegralDataWithBounds(Literal* literal,
   }
   Literal literal(ShapeUtil::MakeTupleShapeWithPtrs(element_shapes));
   for (int i = 0, end = elements.size(); i < end; ++i) {
-    TF_CHECK_OK(literal.CopyFrom(*elements[i], /*dest_shape_index=*/{i}));
+    CHECK_OK(literal.CopyFrom(*elements[i], /*dest_shape_index=*/{i}));
   }
   return literal;
 }
@@ -698,7 +704,7 @@ void PopulateWithRandomIntegralDataWithBounds(Literal* literal,
   }
   Literal literal(ShapeUtil::MakeTupleShapeWithPtrs(element_shapes));
   for (int i = 0, end = elements.size(); i < end; ++i) {
-    TF_CHECK_OK(literal.CopyFrom(elements[i], /*dest_shape_index=*/{i}));
+    CHECK_OK(literal.CopyFrom(elements[i], /*dest_shape_index=*/{i}));
   }
   return literal;
 }
@@ -712,7 +718,7 @@ void PopulateWithRandomIntegralDataWithBounds(Literal* literal,
   }
   Literal literal(ShapeUtil::MakeTupleShapeWithPtrs(element_shapes));
   for (int64_t i = 0, end = elements.size(); i < end; ++i) {
-    TF_CHECK_OK(
+    CHECK_OK(
         literal.MoveFrom(std::move(elements[i]), /*dest_shape_index=*/{i}));
   }
   return literal;
@@ -745,7 +751,8 @@ absl::StatusOr<Literal> MakeFakeLiteral(
     const Shape& shape, std::minstd_rand0* engine,
     std::optional<std::pair<int64_t, int64_t>> limit, bool is_sorted,
     bool no_duplicates, bool use_large_range,
-    std::optional<int64_t> max_bits_of_precision) {
+    std::optional<int64_t> max_bits_of_precision,
+    std::optional<int64_t> alignment) {
   if (shape.IsTuple()) {
     std::vector<Literal> elements;
     const auto& shape_tuple_shapes = shape.tuple_shapes();
@@ -754,8 +761,8 @@ absl::StatusOr<Literal> MakeFakeLiteral(
       TF_ASSIGN_OR_RETURN(
           Literal element,
           MakeFakeLiteral(element_shape, engine, limit, is_sorted,
-                          no_duplicates, use_large_range,
-                          max_bits_of_precision));
+                          no_duplicates, use_large_range, max_bits_of_precision,
+                          alignment));
       elements.push_back(std::move(element));
     }
     return LiteralUtil::MakeTupleOwned(std::move(elements));
@@ -784,7 +791,7 @@ absl::StatusOr<Literal> MakeFakeLiteral(
           }
           if constexpr (primitive_type_constant == PRED) {
             absl::uniform_int_distribution<int> generator(0, 1);
-            TF_CHECK_OK(literal.Populate<bool>(
+            CHECK_OK(literal.Populate<bool>(
                 [&](absl::Span<const int64_t> /*indices*/) {
                   return generator(*engine);
                 }));
@@ -807,8 +814,13 @@ absl::StatusOr<Literal> MakeFakeLiteral(
                     min, static_cast<NativeT>(-(1 << *max_bits_of_precision)));
               }
             }
+            std::optional<NativeT> alignment_native = std::nullopt;
+            if (alignment.has_value()) {
+              alignment_native = static_cast<NativeT>(*alignment);
+            }
             PopulateWithRandomIntegralDataWithBounds<NativeT>(
-                &literal, engine, /*no_duplicate*/ no_duplicates, min, max);
+                &literal, engine, /*no_duplicate*/ no_duplicates, min, max,
+                alignment_native);
             if (is_sorted) {
               std::sort(literal.data<NativeT>().begin(),
                         literal.data<NativeT>().end());

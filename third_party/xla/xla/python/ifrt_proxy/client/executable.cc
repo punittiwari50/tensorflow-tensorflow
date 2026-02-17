@@ -345,7 +345,6 @@ LoadedExecutable::LoadedExecutable(
     std::optional<DeviceListRef> devices,
     std::vector<xla::ifrt::Device*> addressable_devices,
     absl::StatusOr<std::optional<std::string>> fingerprint,
-    tsl::Future<> ready_future,
     std::vector<tsl::RCReference<xla::ifrt::LoadedHostCallback>>
         loaded_host_callbacks,
     std::vector<uint64_t> loaded_host_callback_handles)
@@ -357,7 +356,6 @@ LoadedExecutable::LoadedExecutable(
       devices_(devices),
       addressable_devices_(std::move(addressable_devices)),
       fingerprint_(std::move(fingerprint)),
-      ready_future_(std::move(ready_future)),
       user_context_(xla::ifrt::UserContextScope::current()),
       output_spec_cache_(
           std::make_unique<LoadedExecutable::OutputSpecCache>(this)) {
@@ -381,8 +379,7 @@ LoadedExecutable::LoadedExecutable(
   // eagerly schedule this fetch since, in some implementations, it may take a
   // long time for sharding information to be available.
 
-  auto [promise, future] =
-      tsl::Future<std::shared_ptr<Metadata>>::MakePromise();
+  auto [promise, future] = tsl::MakePromise<std::shared_ptr<Metadata>>();
   metadata_future_ = std::move(future);
 
   auto req = std::make_unique<LoadedExecutableMetadataRequest>();
@@ -538,8 +535,6 @@ absl::StatusOr<std::string> LoadedExecutable::Serialize() const {
       "IFRT service executable does not support `Serialize` since the "
       "underlying serialization format is not stable");
 }
-
-tsl::Future<> LoadedExecutable::GetReadyFuture() const { return ready_future_; }
 
 int LoadedExecutable::num_devices() const { return num_devices_; }
 
@@ -748,15 +743,12 @@ LoadedExecutable::Execute(absl::Span<xla::ifrt::ArrayRef> args,
 
   // Starting version 6, the server populates the status future only if it was
   // explicitly requested via `options.fill_status`.
-  const bool result_needs_exec_status = rpc_helper_->protocol_version() < 6 ||
-                                        req->execute_options().fill_status();
+  const bool result_needs_exec_status = req->execute_options().fill_status();
 
   // The client generates handles if the protocol version is sufficiently newer,
   // and we've already seen at least one response from an execute (and thus know
   // the number of handles to generate).
   const bool client_generated_handles =
-      (rpc_helper_->protocol_version() >=
-       protocol_version::kClientHandlesExecutableOptimization) &&
       output_spec_cache_->Retrieve().has_value();
 
   xla::ifrt::LoadedExecutable::ExecuteResult result;

@@ -21,6 +21,7 @@ https://github.com/bazelbuild/bazel/blob/master/src/main/protobuf/build.proto
 but this is not possible due to XLA's old protobuf version. So we parse by hand
 instead.
 """
+
 import logging
 import sys
 from typing import Set
@@ -69,6 +70,8 @@ _TAGS_TO_DOCUMENTATION_MAP = {
     "requires-gpu-sm80-only": "Requires exactly sm80.",
     "requires-gpu-sm90-only": "Requires exactly sm90.",
     "requires-gpu-sm100-only": "Requires exactly sm100.",
+    "full": "Test requires a full GPU, not a partitioned one. No effect in"
+            " OSS.",
     "gpu": "Catch-all tag for targets that should be built/tested on GPU CI",
     "cpu": "Catch-all tag for targets that should be built/tested on CPU CI.",
     "cuda-only": "Targets that require the CUDA backend to be enabled.",
@@ -95,6 +98,9 @@ _TAGS_TO_DOCUMENTATION_MAP = {
         "Adds the appropriate `xla/tests:pjrt_$BACKEND_client_registry` to the"
         " annotated `xla_test` target. Adding this tag does not synthesize"
         " additional targets."
+    ),
+    "pjrt_migration_candidate": (
+        "Tags the target as a PJRT migration candidate."
     ),
     "multi_gpu": "Used by `xla_test` to signal that multiple GPUs are needed.",
 }

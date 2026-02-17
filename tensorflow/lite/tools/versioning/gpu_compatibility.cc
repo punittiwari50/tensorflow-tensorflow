@@ -725,9 +725,9 @@ absl::Status CheckGpuDelegateCompatibility(const OpSignature& op_sig,
       }
 
       if (value_spec.type != kTfLiteInt8 && value_spec.type != kTfLiteInt4 &&
-          value_spec.type != kTfLiteFloat32) {
+          value_spec.type != kTfLiteInt2 && value_spec.type != kTfLiteFloat32) {
         return absl::InvalidArgumentError(
-            absl::StrCat("Expected int8, int4, or float32, but got ",
+            absl::StrCat("Expected int8, int4, int2, or float32, but got ",
                          TfLiteTypeGetName(value_spec.type), " for input #1."));
       }
       return absl::OkStatus();
@@ -1242,9 +1242,7 @@ absl::Status CheckGpuDelegateCompatibility(const OperatorCode* op_code,
   // Offline compatibility assumes enhanced broadcast is enabled.
   auto status = CheckGpuDelegateCompatibility(
       op_sig, GpuCompatibilityFlags::kEnhancedBroadcast);
-  if (op_sig.builtin_data) {
-    free(op_sig.builtin_data);
-  }
+  free(op_sig.builtin_data);
   return status;
 }
 

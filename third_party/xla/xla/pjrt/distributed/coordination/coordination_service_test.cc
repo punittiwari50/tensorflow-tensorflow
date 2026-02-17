@@ -1,4 +1,4 @@
-/*r Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -78,12 +78,12 @@ KeyValueEntry CreateKv(const std::string& key, const std::string& value) {
   return kv;
 }
 
-CoordinationService::Config GetCoordinationServiceConfig(int num_tasks) {
+CoordinationService::Config GetCoordinationServiceConfig(int num_tasks,
+                                                         bool recoverable) {
   CoordinationService::Config config;
-  CoordinatedJob job;
-  job.set_name("worker");
-  job.set_num_tasks(num_tasks);
-  config.coordinated_job_list.push_back(std::move(job));
+  config.job_name = "worker";
+  config.num_tasks = num_tasks;
+  config.recoverable = recoverable;
   return config;
 }
 
@@ -149,14 +149,13 @@ class CoordinationBarrierTest : public ::testing::Test {
       CoordinatedTask task;
       task.set_job_name("worker");
       task.set_task_id(i);
-      task.set_recoverable(recoverable);
 
       auto client = std::make_unique<TestCoordinationClient>();
       tasks_.push_back(task);
       clients_.push_back(std::move(client));
     }
     CoordinationService::Config config =
-        GetCoordinationServiceConfig(num_tasks);
+        GetCoordinationServiceConfig(num_tasks, recoverable);
 
     coord_service_ =
         std::make_unique<CoordinationService>(tsl::Env::Default(), config);
@@ -220,13 +219,9 @@ class CoordinateTwoTasksTest : public ::testing::Test {
       bool enable_register_barrier = false,
       bool set_worker_job_recoverable = false,
       bool allow_new_incarnation_to_reconnect = false) {
-    CoordinationService::Config config =
-        GetCoordinationServiceConfig(/*num_tasks=*/2);
+    CoordinationService::Config config = GetCoordinationServiceConfig(
+        /*num_tasks=*/2, /*recoverable=*/set_worker_job_recoverable);
     config.heartbeat_timeout = kHeartbeatTimeout;
-    if (set_worker_job_recoverable) {
-      task_0_.set_recoverable(true);
-      task_1_.set_recoverable(true);
-    }
     if (enable_shutdown_barrier) {
       config.shutdown_barrier_timeout = kShutdownBarrierTimeout;
     }
@@ -288,7 +283,7 @@ TEST_F(CoordinateTwoTasksTest, TestStandaloneService) {
 // the same incarnation.
 TEST(CoordinationServiceTest, RegisterTask_AlreadyConnected_Succeeds) {
   const CoordinationService::Config config =
-      GetCoordinationServiceConfig(/*num_tasks=*/1);
+      GetCoordinationServiceConfig(/*num_tasks=*/1, /*recoverable=*/false);
   CoordinatedTask task_0;
   task_0.set_job_name("worker");
   task_0.set_task_id(0);
@@ -307,7 +302,7 @@ TEST(CoordinationServiceTest, RegisterTask_AlreadyConnected_Succeeds) {
 TEST(CoordinationServiceTest,
      RegisterTask_AlreadyConnectedDifferentIncarnation_Fails) {
   const CoordinationService::Config config =
-      GetCoordinationServiceConfig(/*num_tasks=*/1);
+      GetCoordinationServiceConfig(/*num_tasks=*/1, /*recoverable=*/false);
   CoordinatedTask task_0;
   task_0.set_job_name("worker");
   task_0.set_task_id(0);
@@ -327,7 +322,7 @@ TEST(CoordinationServiceTest,
 
 TEST(CoordinationServiceTest, RegisterTask_AlreadyInError_Fails) {
   CoordinationService::Config config =
-      GetCoordinationServiceConfig(/*num_tasks=*/1);
+      GetCoordinationServiceConfig(/*num_tasks=*/1, /*recoverable=*/false);
   CoordinatedTask task_0;
   task_0.set_job_name("worker");
   task_0.set_task_id(0);
@@ -773,7 +768,7 @@ TEST_F(CoordinateTwoTasksTest, TestSetGetValues) {
 
 TEST(CoordinationServiceTest, TryGetKeyValue) {
   const CoordinationService::Config config =
-      GetCoordinationServiceConfig(/*num_tasks=*/1);
+      GetCoordinationServiceConfig(/*num_tasks=*/1, /*recoverable=*/false);
   std::unique_ptr<CoordinationService> coord_service =
       std::make_unique<CoordinationService>(tsl::Env::Default(), config);
 
@@ -795,7 +790,7 @@ TEST(CoordinationServiceTest, TryGetKeyValue) {
 
 TEST(CoordinationServiceTest, IncrementKeyValue) {
   const CoordinationService::Config config =
-      GetCoordinationServiceConfig(/*num_tasks=*/1);
+      GetCoordinationServiceConfig(/*num_tasks=*/1, /*recoverable=*/false);
   std::unique_ptr<CoordinationService> coord_service =
       std::make_unique<CoordinationService>(tsl::Env::Default(), config);
   ASSERT_OK(coord_service->InsertKeyValue("test_key", "1"));
@@ -1908,72 +1903,6 @@ TEST_F(CoordinateTwoTasksTest,
   // as normal.
   EXPECT_THAT(*s0, StatusIs(absl::StatusCode::kOk));
   EXPECT_THAT(*s1, StatusIs(absl::StatusCode::kOk));
-}
-
-TEST(CoordinationServiceTest, RecoverableAndNonRecoverableTasks) {
-  CoordinationService::Config config;
-  // Workers are recoverable, chief is not.
-  CoordinatedTask chief;
-  chief.set_job_name("chief");
-  chief.set_task_id(0);
-  CoordinatedTask task_0;
-  task_0.set_job_name("worker");
-  task_0.set_task_id(0);
-  task_0.set_recoverable(true);
-  CoordinatedTask task_1;
-  task_1.set_job_name("worker");
-  task_1.set_task_id(1);
-  task_1.set_recoverable(true);
-  CoordinatedJob chief_job;
-  chief_job.set_name("chief");
-  chief_job.set_num_tasks(1);
-  config.coordinated_job_list.push_back(chief_job);
-  CoordinatedJob worker_job;
-  worker_job.set_name("worker");
-  worker_job.set_num_tasks(2);
-  config.coordinated_job_list.push_back(worker_job);
-
-  std::unique_ptr<CoordinationService> coord_service =
-      std::make_unique<CoordinationService>(tsl::Env::Default(), config);
-
-  // Each coordinated task registers and polls for errors.
-  ASSERT_OK(coord_service->RegisterTask(chief, IncarnationId(0)));
-  ASSERT_OK(coord_service->RegisterTask(task_0, IncarnationId(0)));
-  ASSERT_OK(coord_service->RegisterTask(task_1, IncarnationId(0)));
-  // These callbacks may be invoked after this test (e.g. cancellations during
-  // coord service dtor), so we use shared pointers to extend their lifetimes
-  // beyond the test to avoid use-after-free errors.
-  absl::Status s_chief, s0, s1;
-  coord_service->PollForErrorAsync(
-      chief, [&s_chief](const absl::Status& status) { s_chief = status; });
-  coord_service->PollForErrorAsync(
-      task_0, [&s0](const absl::Status& status) { s0 = status; });
-  coord_service->PollForErrorAsync(
-      task_1, [&s1](const absl::Status& status) { s1 = status; });
-
-  // Recoverable task hits error.
-  ASSERT_OK(coord_service->ReportTaskError(task_0,
-                                           absl::InternalError("test_error")));
-  // Since no error propagation for recoverable tasks, other tasks should work
-  // as normal.
-  EXPECT_THAT(s_chief, StatusIs(absl::StatusCode::kOk));
-  EXPECT_THAT(s0, StatusIs(absl::StatusCode::kOk));
-  EXPECT_THAT(s1, StatusIs(absl::StatusCode::kOk));
-
-  // TODO(b/342448688): Revisit this test, and think about shutdown barrier
-  // interactions.
-  ASSERT_OK(coord_service->ResetTask(task_0));
-  ASSERT_OK(coord_service->RegisterTask(task_0, IncarnationId(1)));
-  coord_service->PollForErrorAsync(
-      task_0, [&s0](const absl::Status& status) { s0 = status; });
-
-  // Non-recoverable task hits error.
-  ASSERT_OK(
-      coord_service->ReportTaskError(chief, absl::InternalError("test_error")));
-  // Error propagates to all tasks.
-  EXPECT_THAT(s_chief, StatusIs(absl::StatusCode::kInternal));
-  EXPECT_THAT(s0, StatusIs(absl::StatusCode::kInternal));
-  EXPECT_THAT(s1, StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(CoordinateTwoTasksTest,

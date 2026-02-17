@@ -23,6 +23,7 @@ limitations under the License.
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "xnnpack.h"  // from @XNNPACK
 #include "tensorflow/lite/c/common.h"
@@ -56,9 +57,8 @@ inline constexpr char kInMemoryCachePath[] = ":memory";
 // When reading a cache file, the cache should be rejected if `version`
 // doesn't match `kVersion`.
 struct XNNPackCacheHeader {
-  enum : uint64_t { kInvalidHeader = 0, kVersion = 1 };
+  enum : uint64_t { kInvalidHeader = 0, kVersion = 2 };
   uint64_t version;
-  uint8_t xnnpack_build_identifier[32];
   uint64_t buffer_list_offset;
   uint64_t buffer_list_size;
 };
@@ -161,8 +161,8 @@ class WeightCacheBuilder {
   // The buffer space must have been reserved before using `Reserve`. If not, a
   // new call to `Reserve` will be done and the data will be copied over.
   [[nodiscard /*The location to the appended data should be saved.*/]]
-  BufferLocation Append(PackIdentifier pack_id, const void* data,
-                        uint64_t size);
+  BufferLocation Append(PackIdentifier pack_id, const void* data, uint64_t size,
+                        int fingerprint_id);
 
   // Writes the flatbuffer to disk.
   [[nodiscard /*Writing the weight cache can fail.*/]]
@@ -272,6 +272,16 @@ class MMapWeightCacheProvider {
   // Loads the weight cache previously set with `SetFilePath`.
   [[nodiscard /*Loading cache data may fail.*/]]
   bool Load();
+
+  // Attempts to lock the cache in memory. Only applicable when the OS supports
+  // memory locking and the cache is mapped.
+  [[nodiscard /*Locking cache data may fail.*/]]
+  bool LockMemory();
+
+  // Attempts to unlock the cache in memory. Only applicable when the OS
+  // supports memory locking and the cache is mapped and locked.
+  [[nodiscard /*Unlocking cache data may fail.*/]]
+  bool UnlockMemory();
 
   // Checks if the cache is currently being built or if it was loaded from a
   // file.

@@ -28,13 +28,13 @@ limitations under the License.
 #include "absl/log/log.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/string_view.h"
+#include "xla/backends/gpu/transforms/collectives/collective_ops_utils.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/hlo/utils/hlo_query.h"
 #include "xla/service/collective_ops_utils.h"
 #include "xla/service/gpu/backend_configs.pb.h"
 #include "xla/service/gpu/cublas_cudnn.h"
-#include "xla/service/gpu/transforms/collectives/collective_ops_utils.h"
 #include "xla/service/latency_hiding_scheduler.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
@@ -129,7 +129,7 @@ std::pair<GpuResourceType, ResourceUsageType> GetP2PResourceAndUsage(
 bool ShapeHasHostMemorySpace(const Shape& shape) {
   return shape.IsArray() && shape.has_layout() &&
          shape.layout().memory_space() ==
-             static_cast<int64_t>(stream_executor::MemoryType::kHost);
+             static_cast<int64_t>(stream_executor::MemorySpace::kHost);
 }
 
 bool IsSlicingMemcpy(const HloInstruction& hlo) {

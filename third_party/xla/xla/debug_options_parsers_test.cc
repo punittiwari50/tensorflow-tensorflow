@@ -31,6 +31,7 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "google/protobuf/repeated_field.h"
+#include "xla/backends/autotuner/backends.pb.h"
 #include "xla/debug_options_flags.h"
 #include "xla/parse_flags_from_env.h"
 #include "xla/service/dump.h"
@@ -393,13 +394,12 @@ TEST(ParseRepeatedEnumFlagsTest, CommandBufferCmdType) {
 
   // Check that the default setting has 6 types.
   const auto& enabled_types = debug_options.xla_gpu_enable_command_buffer();
-  ASSERT_EQ(enabled_types.size(), 7);
+  ASSERT_EQ(enabled_types.size(), 6);
   ASSERT_THAT(
       enabled_types,
       ElementsAre(DebugOptions::FUSION, DebugOptions::CUBLAS,
                   DebugOptions::CUBLASLT, DebugOptions::CUSTOM_CALL,
-                  DebugOptions::CUDNN, DebugOptions::DYNAMIC_SLICE_FUSION,
-                  DebugOptions::DYNAMIC_SLICE_COPY_FUSION));
+                  DebugOptions::CUDNN, DebugOptions::DYNAMIC_SLICE_FUSION));
 
   // Initialize the flag objects.
   std::vector<tsl::Flag> flag_objects;
@@ -408,32 +408,29 @@ TEST(ParseRepeatedEnumFlagsTest, CommandBufferCmdType) {
   // Removing options from the existing setting.
   SetXlaFlagsEnvVar("--xla_gpu_enable_command_buffer=-fusion,-cublas");
   ParseFlagsFromEnvAndDieIfUnknown("XLA_FLAGS", flag_objects);
-  EXPECT_EQ(enabled_types.size(), 5);
+  EXPECT_EQ(enabled_types.size(), 4);
   EXPECT_THAT(
       enabled_types,
       ElementsAre(DebugOptions::CUBLASLT, DebugOptions::CUSTOM_CALL,
-                  DebugOptions::CUDNN, DebugOptions::DYNAMIC_SLICE_FUSION,
-                  DebugOptions::DYNAMIC_SLICE_COPY_FUSION));
+                  DebugOptions::CUDNN, DebugOptions::DYNAMIC_SLICE_FUSION));
 
   // Removing an option that isn't there and adding a duplicate.
   SetXlaFlagsEnvVar("--xla_gpu_enable_command_buffer=+cublaslt,-fusion");
   ParseFlagsFromEnvAndDieIfUnknown("XLA_FLAGS", flag_objects);
+  EXPECT_EQ(enabled_types.size(), 4);
+  EXPECT_THAT(
+      enabled_types,
+      ElementsAre(DebugOptions::CUBLASLT, DebugOptions::CUSTOM_CALL,
+                  DebugOptions::CUDNN, DebugOptions::DYNAMIC_SLICE_FUSION));
+
+  // Adding an option.
+  SetXlaFlagsEnvVar("--xla_gpu_enable_command_buffer=+cublas");
+  ParseFlagsFromEnvAndDieIfUnknown("XLA_FLAGS", flag_objects);
   EXPECT_EQ(enabled_types.size(), 5);
   EXPECT_THAT(
       enabled_types,
       ElementsAre(DebugOptions::CUBLASLT, DebugOptions::CUSTOM_CALL,
                   DebugOptions::CUDNN, DebugOptions::DYNAMIC_SLICE_FUSION,
-                  DebugOptions::DYNAMIC_SLICE_COPY_FUSION));
-
-  // Adding an option.
-  SetXlaFlagsEnvVar("--xla_gpu_enable_command_buffer=+cublas");
-  ParseFlagsFromEnvAndDieIfUnknown("XLA_FLAGS", flag_objects);
-  EXPECT_EQ(enabled_types.size(), 6);
-  EXPECT_THAT(
-      enabled_types,
-      ElementsAre(DebugOptions::CUBLASLT, DebugOptions::CUSTOM_CALL,
-                  DebugOptions::CUDNN, DebugOptions::DYNAMIC_SLICE_FUSION,
-                  DebugOptions::DYNAMIC_SLICE_COPY_FUSION,
                   DebugOptions::CUBLAS));
 
   // Overwriting the default setting.
@@ -516,27 +513,21 @@ TEST(ParseRepeatedEnumFlagsTest, AutotuneBackend) {
       debug_options.xla_gpu_experimental_autotune_backends();
 
   // Check that the default setting is populated.
-  ASSERT_THAT(enabled_backends,
-              ElementsAre(DebugOptions::AUTOTUNE_BACKEND_CUDNN,
-                          DebugOptions::AUTOTUNE_BACKEND_TRITON,
-                          DebugOptions::AUTOTUNE_BACKEND_CUBLAS,
-                          DebugOptions::AUTOTUNE_BACKEND_CUBLASLT));
+  ASSERT_THAT(enabled_backends, IsEmpty());
 
   // Overwriting the default setting.
   SetXlaFlagsEnvVar("--xla_gpu_experimental_autotune_backends=cudnn,triton");
   ParseFlagsFromEnvAndDieIfUnknown("XLA_FLAGS", flag_objects);
   EXPECT_EQ(enabled_backends.size(), 2);
-  EXPECT_THAT(enabled_backends,
-              ElementsAre(DebugOptions::AUTOTUNE_BACKEND_CUDNN,
-                          DebugOptions::AUTOTUNE_BACKEND_TRITON));
+  EXPECT_THAT(enabled_backends, ElementsAre(autotuner::Backend::CUDNN,
+                                            autotuner::Backend::TRITON));
 
   // Adding / removing options from the existing setting.
   SetXlaFlagsEnvVar("--xla_gpu_experimental_autotune_backends=+cublas,-triton");
   ParseFlagsFromEnvAndDieIfUnknown("XLA_FLAGS", flag_objects);
   EXPECT_EQ(enabled_backends.size(), 2);
-  EXPECT_THAT(enabled_backends,
-              ElementsAre(DebugOptions::AUTOTUNE_BACKEND_CUDNN,
-                          DebugOptions::AUTOTUNE_BACKEND_CUBLAS));
+  EXPECT_THAT(enabled_backends, ElementsAre(autotuner::Backend::CUDNN,
+                                            autotuner::Backend::CUBLAS));
 }
 
 TEST(ParseIntRangeInclusiveTest, SingleInteger) {
