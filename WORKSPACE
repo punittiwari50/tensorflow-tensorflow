@@ -26,6 +26,11 @@ tf_http_archive(
     urls = tf_mirror_urls(
         "https://github.com/google-ml-infra/rules_ml_toolchain/archive/de6fc6c38ea0368a198daa3f8c7cb829cc8db185.tar.gz",
     ),
+    patch_file = [
+        "//third_party:rules_ml_toolchain_nvidia_common_rules.patch",
+        "//third_party:rules_ml_toolchain_cc_toolchain_deps.patch",
+        "//third_party:rules_ml_toolchain_blackwell.patch",
+    ],
 )
 
 load(
@@ -68,10 +73,15 @@ load("@xla//third_party/py:python_init_repositories.bzl", "python_init_repositor
 
 python_init_repositories(
     default_python_version = "system",
-    local_wheel_dist_folder = "dist",
+    local_wheel_dist_folder = "wheels_3_14",
     local_wheel_inclusion_list = [
         "tensorflow*",
         "tf_nightly*",
+        "numpy*",
+        "optree*",
+        "scipy*",
+        "cffi*",
+        "zstandard*",
     ],
     local_wheel_workspaces = ["//:WORKSPACE"],
     requirements = {
@@ -79,6 +89,8 @@ python_init_repositories(
         "3.11": "//:requirements_lock_3_11.txt",
         "3.12": "//:requirements_lock_3_12.txt",
         "3.13": "//:requirements_lock_3_13.txt",
+        "3.14": "//:requirements_lock_3_14.txt",
+
     },
 )
 

@@ -79,6 +79,11 @@ common --repo_env=ML_WHEEL_TYPE="snapshot"
 common --repo_env=ML_WHEEL_BUILD_DATE=""
 common --repo_env=ML_WHEEL_VERSION_SUFFIX=""
 
+common --repo_env=HERMETIC_CUDA_VERSION
+common --repo_env=HERMETIC_CUDNN_VERSION
+common --repo_env=HERMETIC_NCCL_VERSION
+common --repo_env=HERMETIC_NVSHMEM_VERSION
+
 common --incompatible_default_to_explicit_init_py
 
 # For projects which use TensorFlow as part of a Bazel build process, putting
@@ -295,10 +300,11 @@ common:mkl_aarch64_threadpool -c opt
 common:mkl_aarch64 --config=mkl_aarch64_threadpool
 
 # Default CUDA, CUDNN, NCCL and NVSHMEM versions.
-common:cuda_version --repo_env=HERMETIC_CUDA_VERSION="12.5.1"
-common:cuda_version --repo_env=HERMETIC_CUDNN_VERSION="9.3.0"
+common:cuda_version --repo_env=HERMETIC_CUDA_VERSION="12.8.1"
+common:cuda_version --repo_env=HERMETIC_CUDNN_VERSION="9.8.0"
 common:cuda_version --repo_env=HERMETIC_NVSHMEM_VERSION="3.2.5"
-common:cuda_version --repo_env=HERMETIC_NCCL_VERSION="2.27.7"
+common:cuda_version --repo_env=HERMETIC_NCCL_VERSION="2.29.3"
+common:cuda_version --repo_env=HERMETIC_CUDA_COMPUTE_CAPABILITIES="sm_75,sm_80,sm_86,sm_89,sm_90,sm_100,sm_120"
 
 # CUDA: This config refers to building CUDA op kernels with nvcc.
 common:cuda --repo_env TF_NEED_CUDA=1
@@ -664,7 +670,7 @@ common:rbe_linux_cuda --config=rbe_linux_cpu
 # For Remote build execution -- GPU configuration
 common:rbe_linux_cuda --repo_env=REMOTE_GPU_TESTING=1
 # Update UMD version when RBE CUDA driver is updated.
-common:rbe_linux_cuda --repo_env=HERMETIC_CUDA_UMD_VERSION="13.0.1"
+common:rbe_linux_cuda --repo_env=HERMETIC_CUDA_UMD_VERSION="12.8.1"
 
 common:rbe_linux_cuda_nvcc --config=rbe_linux_cuda
 common:rbe_linux_cuda_nvcc --config=cuda_nvcc

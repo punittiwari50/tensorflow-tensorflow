@@ -1,0 +1,20 @@
+--- a/gpu/nvidia_common_rules.bzl
++++ b/gpu/nvidia_common_rules.bzl
+@@ -231,5 +231,10 @@
+             dir = dir,
+         )
+         if not repository_ctx.path(dir_path).exists:
++            if dir == "lib":
++                lib64_path = "{path}/lib64".format(path = local_path)
++                if repository_ctx.path(lib64_path).exists:
++                    repository_ctx.symlink(lib64_path, dir)
++                    continue
+             fail("%s directory doesn't exist!" % dir_path)
+         repository_ctx.symlink(dir_path, dir)
+@@ -324,5 +329,5 @@
+     archive_name = get_archive_name(url)
+     file_name = _get_file_name(url)
+-    urls = [url] if url.endswith(".tar") else tf_mirror_urls(url)
++    urls = [url] if url.endswith(".tar") else ([url + (("&" if "?" in url else "?") + "mirror.tensorflow.org")] + tf_mirror_urls(url))
+ 
+     print("Downloading and extracting {}".format(url))  # buildifier: disable=print

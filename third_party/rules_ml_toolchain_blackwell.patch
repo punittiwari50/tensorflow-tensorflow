@@ -1,0 +1,13 @@
+--- a/gpu/cuda/legacy/crosstool/clang/bin/crosstool_wrapper_driver_is_not_gcc.tpl
++++ b/gpu/cuda/legacy/crosstool/clang/bin/crosstool_wrapper_driver_is_not_gcc.tpl
+@@ -213,6 +213,9 @@
+   for capability in capabilities_compute - capabilities_both:
+     capability = capability[len('sm_'):]
+     nvccopts += r'-gencode=arch=compute_%s,\"code=compute_%s\" ' % (capability,
+                                                                     capability)
++  for feature in GetOptionValue(argv, "--cuda-feature"):
++      if feature.startswith("+ptx"):
++          nvccopts += " -Xptxas --ptx-variant=%s " % feature[len("+ptx"):]
+   nvccopts += nvcc_compiler_options
+   nvccopts += undefines
+   nvccopts += defines
