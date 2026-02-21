@@ -39,6 +39,7 @@ load("@xla//third_party/stablehlo:workspace.bzl", stablehlo = "repo")
 load("@xla//third_party/tensorrt:tensorrt_configure.bzl", "tensorrt_configure")
 load("@xla//third_party/tensorrt:workspace.bzl", tensorrt = "repo")
 load("@xla//third_party/triton:workspace.bzl", triton = "repo")
+load("@xla//third_party/xxd:workspace.bzl", xxd = "repo")
 load("@xla//tools/def_file_filter:def_file_filter_configure.bzl", "def_file_filter_configure")
 load("@xla//tools/toolchains:cpus/aarch64/aarch64_compiler_configure.bzl", "aarch64_compiler_configure")
 load("@xla//tools/toolchains:cpus/arm/arm_compiler_configure.bzl", "arm_compiler_configure")
@@ -116,6 +117,7 @@ def _initialize_third_party():
     tensorrt()
     nvshmem()
     triton()
+    xxd()
 
     # copybara: tsl vendor
 
@@ -468,13 +470,13 @@ def _tf_repositories():
 
     tf_http_archive(
         name = "com_github_grpc_grpc",
-        sha256 = "dd6a2fa311ba8441bbefd2764c55b99136ff10f7ea42954be96006a2723d33fc",
-        strip_prefix = "grpc-1.74.0",
+        sha256 = "e2ace790a5f2d0f83259d1390a816a33b013ea34df2e86084d927e58daa4c5d9",
+        strip_prefix = "grpc-1.78.0",
         system_build_file = "//third_party/systemlibs:grpc.BUILD",
         patch_file = [
             "@xla//third_party/grpc:grpc.patch",
         ],
-        urls = tf_mirror_urls("https://github.com/grpc/grpc/archive/refs/tags/v1.74.0.tar.gz"),
+        urls = tf_mirror_urls("https://github.com/grpc/grpc/archive/refs/tags/v1.78.0.tar.gz"),
     )
 
     tf_http_archive(
